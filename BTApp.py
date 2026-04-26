@@ -1,72 +1,90 @@
-
-# import the necessary packages
+# ==============================
+# IMPORTS
+# ==============================
 import tensorflow as tf
-from tensorflow.keras.applications import imagenet_utils
-from tensorflow.keras.models import load_model
 from PIL import Image, ImageOps
-import matplotlib.pyplot as plt
-from collections import deque
 import streamlit as st
-import pandas as pd
 import numpy as np
-import argparse
-import imutils
-import pickle
-import cv2
 import os
+import requests
 
+# ==============================
+# PAGE CONFIG
+# ==============================
+st.set_page_config(page_title="Brain Tumor Detection", layout="centered")
 
-# Run app on cmd/anaconda prompt
-# Terminal command: streamlit run bt1.py
+st.title("🧠 Brain Tumor Classification")
+st.header("CNN-based MRI Analysis")
+st.write("Upload a brain MRI scan to detect Tumor or Healthy")
 
-import streamlit as st
-st.title("Brain Tumor Classification")
-st.header("Convolutional Neural Network (CNN) for Brain Tumor Classification")
-st.text("Upload a brain MRI scan for image classification as Brain Tumor or Healthy")
+# ==============================
+# DOWNLOAD MODEL FROM DRIVE
+# ==============================
+MODEL_URL = "https://drive.google.com/uc?id=1usdJ6gRoWjyKXgiuP8g7XcnWcNmpWq4o"
+MODEL_PATH = "BrainTumor.h5"
 
+@st.cache_resource
+def load_model_from_drive():
+    if not os.path.exists(MODEL_PATH):
+        with open(MODEL_PATH, "wb") as f:
+            f.write(requests.get(MODEL_URL).content)
+    model = tf.keras.models.load_model(MODEL_PATH)
+    return model
 
-def import_and_classify(img, weights_file):
-    # Load the model
-    model = tf.keras.models.load_model(weights_file)
-    
+model = load_model_from_drive()
 
-    # Create the array of the right shape to feed into the keras model
+# ==============================
+# PREDICTION FUNCTION
+# ==============================
+def import_and_classify(img):
     data = np.ndarray(shape=(1, 224, 224, 3), dtype=np.float32)
-    image = img
-    #image sizing
+
     size = (224, 224)
-    
-    image = ImageOps.fit(image, size, Image.Resampling.LANCZOS)
-    image = image.convert("RGB")
-    #turn the image into a numpy array
+    image = ImageOps.fit(img, size, Image.Resampling.LANCZOS)
+    image = image.convert("RGB")   # 🔥 Fix grayscale issue
+
     image_array = np.asarray(image)
-    # Normalize the image
     normalized_image_array = (image_array.astype(np.float32) / 127.0) - 1
 
-    # Load the image into the array
     data[0] = normalized_image_array
 
-    # run the inference
     prediction = model.predict(data)
-    return np.argmax(prediction) # return position of the highest probability
+    return np.argmax(prediction)
 
-uploaded_file = st.file_uploader("Choose a brain MRI", type=("jpg","png","jpeg"))
-st.text("Accepted Brain MRI scans | only jpg & jpeg & png files")
+# ==============================
+# FILE UPLOAD
+# ==============================
+uploaded_file = st.file_uploader("📤 Upload MRI Image", type=("jpg","png","jpeg"))
 
-# To show sample 
-mri_scan = st.checkbox("How does an MRI scan look")
-if mri_scan:
-    Image_1 = Image.open('Cmd Test Images/Yes1.JPG')
-    st.image(Image_1, width=300, caption = 'Sample MRI scan')
+st.write("Accepted formats: JPG, PNG, JPEG")
 
+# ==============================
+# SAMPLE IMAGE (SAFE)
+# ==============================
+if st.checkbox("Show sample MRI"):
+    sample_path = "Cmd Test Images/Yes1.JPG"
+    if os.path.exists(sample_path):
+        Image_1 = Image.open(sample_path)
+        st.image(Image_1, width=300, caption="Sample MRI scan")
+    else:
+        st.warning("Sample image not found")
 
-if st.button('Check Results'):
+# ==============================
+# PREDICTION BUTTON
+# ==============================
+if st.button("🔍 Check Results"):
     if uploaded_file is not None:
         image = Image.open(uploaded_file)
-        st.image(image, width=400, caption='Uploaded MRI')
-        st.write("")
-        label = import_and_classify(image, 'BrainTumor.h5')
+        st.image(image, width=400, caption="Uploaded MRI")
+
+        st.write("Analyzing...")
+
+        label = import_and_classify(image)
+
         if label == 1:
-            st.write("The MRI scan has a brain tumor")
+            st.error("🛑 Brain Tumor Detected")
         else:
-            st.write("The MRI scan is healthy")
+            st.success("✅ Healthy Brain")
+
+    else:
+        st.warning("Please upload an image first")
